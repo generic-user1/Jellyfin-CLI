@@ -1,5 +1,5 @@
 from os.path import isfile
-from os import devnull, getenv
+from os import devnull, getenv, write as os_write
 from aio_mpv_jsonipc import MPV
 from asyncio import get_event_loop, sleep
 from datetime import timedelta
@@ -75,7 +75,9 @@ class Player:
         except:
             pass
 
-    async def _play(self, item, block=True):
+    #messagePipe: optional file descriptor (int) for message pipe
+    #if none is provided, messages are just printed to stdout
+    async def _play(self, item, block=True, messagePipe = None):
         if self.playing:
             await self.mpv.send(["quit"])
         self.item = item
@@ -87,16 +89,24 @@ class Player:
             key = await self._get_api_key()
         except HTTPError as e:
             if isinstance(e, HTTPForbidden):
-                #print specialized message in case of 403 Forbidden
-                print(f"Could not create API token because user \"{self.context.username}\" does not have permission")
+                #specialized message in case of 403 Forbidden
+                msgText = f"Could not create API token because user \"{self.context.username}\" does not have permission"
             elif isinstance(e, HTTPUnauthorized):
-                #print specialized message in case of 401 Unauthorized
-                print("Could not create API token due to HTTP error: 401 Unauthorized")
+                #specialized message in case of 401 Unauthorized
+                msgText = "Could not create API token due to HTTP error: 401 Unauthorized"
             else:
-                #print generic message for any other error
-                print(f"Could not create API token due to HTTP error: {e.status}")
+                #generic message for any other error
+                msgText = f"Could not create API token due to HTTP error: {e.status}"
+            #add common message text
+            msgText += "\nUsing login token in place of API key - be careful not to leak it!"
+            try:
+                #try to write to messagePipe, which is generally
+                #more consistent than direct printing
+                os_write(messagePipe, msgText.encode('utf-8'))
+            except:
+                #if writing to messagePipe fails, direct print as a fallback
+                print(msgText)
 
-            print("Using login token in place of API key - be careful not to leak it!")
             key = self.context.get_token()
             
         url = "{}/Items/{}/Download?api_key={}".format(self.context.url, item.id, key)

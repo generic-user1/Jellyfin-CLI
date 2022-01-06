@@ -22,9 +22,33 @@ class App:
         self.previous_key_callback = (None, (None))
         self.draw.unhandled_input = self._process_keypress
 
+        #create pipe to write to from other threads, and store the file descriptor
+        #the _showPlayerMessage function reads from this pipe
+        self.messagePipe = self.draw.watch_pipe(self._showPlayerMessage)
+
         self._last_view = self.draw_search
         self.search_query = ""
         self.search_edit = urwid.Edit("Search: ", edit_text=self.search_query)
+
+    #callback function used to display messages from other threads
+    #recieves input from self.messagePipe
+    def _showPlayerMessage(self, messageText):
+
+        #decode message if it was passed as bytes
+        if isinstance(messageText, bytes):
+            messageText = messageText.decode("utf-8")
+
+        #remove leading "$" charachter if there is one
+        #if for some reason you need to lead with a "$", use "$$" instead
+        if messageText[-1] == "$":
+            messageText = messageText[-1:]
+
+        #use the existing _empty_screen method to display the message
+        self._empty_screen(text=messageText)
+        
+        #keep pipe open by returning True;
+        #returning False closes the pipe
+        return True
 
     def _process_keypress(self, key):
         if key == "tab":
@@ -198,10 +222,14 @@ class App:
 
     async def _play(self, item):
         self._empty_screen()
-        await self.player._play(item)
+        await self.player._play(item, messagePipe = self.messagePipe)
         self._draw_screen()
 
     async def _bg_play(self , item):
+        #NOTE: messagePipe is not passed here; this is intentional
+        #writing to messagePipe invokes _empty_screen (via _showPlayerMessage)
+        #this would cause the interface to disappear - a better way to put
+        #text on the screen ALONGSIDE the interface will be needed
         await self.player._play(item, block=False)
         while self.player.playing:
             play_string = self.player.get_playback_string()
