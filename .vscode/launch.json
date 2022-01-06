@@ -12,6 +12,13 @@
             "console": "integratedTerminal"
         },
         {
+            "name": "[ext]jellyfin-cli",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/jellyfin-cli",
+            "console": "externalTerminal"
+        },
+        {
             "name": "Python: Current File",
             "type": "python",
             "request": "launch",
