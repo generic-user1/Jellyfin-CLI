@@ -4,6 +4,7 @@ from aio_mpv_jsonipc import MPV
 from asyncio import get_event_loop, sleep
 from datetime import timedelta
 from jellyfin_cli.jellyfin_client.JellyfinClient import HttpError
+from aiohttp.web_exceptions import HTTPError, HTTPUnauthorized, HTTPForbidden
 
 def ticks_to_seconds(ticks):
     return int(ticks*(1/10000000))
@@ -29,6 +30,10 @@ class Player:
         if res.status == 200:
             res = await res.json()
             return {i["AppName"] : i["AccessToken"] for i in res["Items"]}
+        elif res.status == 401:
+            raise HTTPUnauthorized()
+        elif res.status == 403:
+            raise HTTPForbidden()
 
     async def _get_api_key(self):
         keys = await self._get_api_keys()
@@ -80,9 +85,20 @@ class Player:
         self.played = False
         try:
             key = await self._get_api_key()
-        except:
+        except HTTPError as e:
+            if isinstance(e, HTTPForbidden):
+                #print specialized message in case of 403 Forbidden
+                print(f"Could not create API token because user \"{self.context.username}\" does not have permission")
+            elif isinstance(e, HTTPUnauthorized):
+                #print specialized message in case of 401 Unauthorized
+                print("Could not create API token due to HTTP error: 401 Unauthorized")
+            else:
+                #print generic message for any other error
+                print(f"Could not create API token due to HTTP error: {e.status}")
+
+            print("Using login token in place of API key - be careful not to leak it!")
             key = self.context.get_token()
-            print("Could not create API token. I will use your login token. Be careful to not leak it!")
+            
         url = "{}/Items/{}/Download?api_key={}".format(self.context.url, item.id, key)
         self.mpv = MPV(media=url)
         await self.mpv.start()
