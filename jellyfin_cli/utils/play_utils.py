@@ -57,8 +57,15 @@ class Player:
             raise HttpError(f"Failed to create API key after {maxAttempts} attempts")       
 
     async def _delete_api_key(self, key=None):
+        from warnings import warn
         if not key:
-            key = await self._get_api_key()
+            try:
+                key = await self._get_api_key()
+            except HttpError:
+                warn("Did not delete api key because it could not be retrieved; It may have already been deleted.")
+                #return without submitting request
+                return None
+
         await self.context.client.delete("{}/Auth/Keys/{}".format(self.context.url, key))
 
     
@@ -87,8 +94,11 @@ class Player:
         self.played = False
         try:
             key = await self._get_api_key()
-        except web_exceptions.HTTPError as e:
-            if isinstance(e, web_exceptions.HTTPForbidden):
+        except (HttpError, web_exceptions.HTTPError) as e:
+            if isinstance(e, HttpError):
+                #HttpError is raised when request to create API key fails multiple times
+                msgText = "Could not create API token after multiple attempts"
+            elif isinstance(e, web_exceptions.HTTPForbidden):
                 #specialized message in case of 403 Forbidden
                 msgText = f"Could not create API token because user \"{self.context.username}\" does not have permission"
             elif isinstance(e, web_exceptions.HTTPUnauthorized):
