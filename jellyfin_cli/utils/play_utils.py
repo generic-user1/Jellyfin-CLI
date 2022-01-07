@@ -4,7 +4,7 @@ from aio_mpv_jsonipc import MPV
 from asyncio import get_event_loop, sleep
 from datetime import timedelta
 from jellyfin_cli.jellyfin_client.JellyfinClient import HttpError
-from aiohttp.web_exceptions import HTTPError, HTTPUnauthorized, HTTPForbidden
+from aiohttp import web_exceptions
 
 def ticks_to_seconds(ticks):
     return int(ticks*(1/10000000))
@@ -31,9 +31,9 @@ class Player:
             res = await res.json()
             return {i["AppName"] : i["AccessToken"] for i in res["Items"]}
         elif res.status == 401:
-            raise HTTPUnauthorized()
+            raise web_exceptions.HTTPUnauthorized()
         elif res.status == 403:
-            raise HTTPForbidden()
+            raise web_exceptions.HTTPForbidden()
 
     async def _get_api_key(self):
         keys = await self._get_api_keys()
@@ -87,11 +87,11 @@ class Player:
         self.played = False
         try:
             key = await self._get_api_key()
-        except HTTPError as e:
-            if isinstance(e, HTTPForbidden):
+        except web_exceptions.HTTPError as e:
+            if isinstance(e, web_exceptions.HTTPForbidden):
                 #specialized message in case of 403 Forbidden
                 msgText = f"Could not create API token because user \"{self.context.username}\" does not have permission"
-            elif isinstance(e, HTTPUnauthorized):
+            elif isinstance(e, web_exceptions.HTTPUnauthorized):
                 #specialized message in case of 401 Unauthorized
                 msgText = "Could not create API token due to HTTP error: 401 Unauthorized"
             else:
